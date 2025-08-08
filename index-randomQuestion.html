@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Quiz Fetcher</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-2xl text-center border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2 text-blue-400">Supabase Quiz Question Fetcher</h1>
+        <p class="mb-6 text-gray-400">Click the button to fetch a random question.</p>
+        
+        <button id="fetchButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 w-full">
+            Fetch Random Question
+        </button>
+
+        <div id="status" class="mt-6 text-gray-500 italic">
+            Awaiting connection...
+        </div>
+
+        <!-- Container for the question details -->
+        <div id="result-container" class="mt-4 p-6 bg-gray-900 rounded-lg text-left border border-gray-700 hidden">
+            <h2 id="question-title" class="text-2xl font-bold text-blue-300 mb-3"></h2>
+            <p id="question-scenario" class="text-gray-300 mb-5 text-lg"></p>
+            
+            <h3 class="font-semibold text-gray-200 mb-3">Options:</h3>
+            <div id="question-options" class="space-y-3 mb-5"></div>
+            
+            <button id="show-explanation" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-4 rounded-lg">Show Explanation</button>
+
+            <div id="explanation-container" class="hidden mt-4 p-4 bg-gray-800 border border-gray-700 rounded-lg">
+                <h3 class="font-semibold text-yellow-400">Explanation:</h3>
+                <p id="question-explanation" class="text-gray-400 mt-1"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase Client Library (UMD Bundle for browsers) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+    <!-- Our Application Logic -->
+    <script type="module">
+        // --- Supabase Setup (Combined into one file) ---
+        const { createClient } = supabase;
+        const SUPABASE_URL = 'secret';
+        const SUPABASE_KEY = 'secret';
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        /**
+         * Fetches a single random item from a specified table by calling a Supabase RPC function.
+         * @param {string} rpcName - The name of the RPC function (e.g., 'get_random_row').
+         * @param {object} params - The parameters to pass to the RPC function.
+         * @returns {Promise<object>} The data returned from the function.
+         */
+        async function fetchRandomItem(rpcName, params) {
+            // RPC call now includes parameters
+            const { data, error } = await supabaseClient.rpc(rpcName, params);
+            if (error) {
+                console.error(`Error calling RPC function '${rpcName}':`, error);
+                throw error;
+            }
+            if (!data) { // The new function returns a single object, not an array
+                throw new Error(`No data returned from '${rpcName}'.`);
+            }
+            // The new function returns a single JSON object directly
+            return data;
+        }
+
+        // --- Get references to our HTML elements ---
+        const fetchButton = document.getElementById('fetchButton');
+        const statusElement = document.getElementById('status');
+        const resultContainer = document.getElementById('result-container');
+        const questionTitle = document.getElementById('question-title');
+        const questionScenario = document.getElementById('question-scenario');
+        const questionOptions = document.getElementById('question-options');
+        const showExplanationBtn = document.getElementById('show-explanation');
+        const explanationContainer = document.getElementById('explanation-container');
+        const questionExplanation = document.getElementById('question-explanation');
+
+        // --- UI Logic ---
+        const displayQuestion = (question) => {
+            questionTitle.textContent = question.title || 'No Title';
+            questionScenario.textContent = question.scenario || 'No Scenario';
+            questionExplanation.textContent = question.explanation || 'No Explanation Provided.';
+            
+            questionOptions.innerHTML = '';
+            if (question.options && Array.isArray(question.options)) {
+                question.options.forEach(opt => {
+                    const optionEl = document.createElement('div');
+                    optionEl.className = 'p-3 bg-gray-700 rounded-lg border border-gray-600';
+                    optionEl.textContent = typeof opt === 'object' && opt.text ? opt.text : opt;
+                    questionOptions.appendChild(optionEl);
+                });
+            }
+            
+            resultContainer.classList.remove('hidden');
+            resultContainer.classList.add('fade-in');
+        };
+
+        const handleFetch = async () => {
+            statusElement.textContent = 'Fetching a random question...';
+            statusElement.classList.remove('text-red-400', 'text-green-400');
+            statusElement.classList.add('text-yellow-400');
+            fetchButton.disabled = true;
+            resultContainer.classList.add('hidden');
+            explanationContainer.classList.add('hidden');
+
+            try {
+                // Call our new dynamic function with the table name as a parameter
+                const question = await fetchRandomItem('get_random_row', { 
+                    p_table_name: 'quiz_questions' 
+                });
+
+                statusElement.textContent = 'Success! Question received.';
+                statusElement.classList.remove('text-yellow-400');
+                statusElement.classList.add('text-green-400');
+                displayQuestion(question);
+
+            } catch (error) {
+                statusElement.textContent = 'An error occurred.';
+                statusElement.classList.add('text-red-400');
+                questionTitle.textContent = 'Error';
+                questionScenario.textContent = `${error.message}`;
+                questionOptions.innerHTML = '';
+                resultContainer.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                fetchButton.disabled = false;
+            }
+        };
+
+        const toggleExplanation = () => {
+            explanationContainer.classList.toggle('hidden');
+        };
+
+        // --- Attach event listeners ---
+        fetchButton.addEventListener('click', handleFetch);
+        showExplanationBtn.addEventListener('click', toggleExplanation);
+    </script>
+</body>
+</html>
